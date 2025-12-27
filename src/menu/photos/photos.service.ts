@@ -12,40 +12,69 @@ export class PhotosService {
     @InjectModel(MenuItemPhoto.name) private readonly photoModel: Model<MenuItemPhoto>,
   ) {}
 
+  private oid(id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid id');
+    return new Types.ObjectId(id);
+  }
+
   private async ensureItem(itemId: string) {
-    const item = await this.itemModel.findOne({ _id: itemId, restaurantId: RESTAURANT_ID, isDeleted: false });
+    const item = await this.itemModel.findOne({
+      _id: this.oid(itemId),
+      restaurantId: RESTAURANT_ID,
+      isDeleted: false,
+    });
     if (!item) throw new NotFoundException('Item not found');
     return item;
+  }
+
+  async list(itemId: string) {
+    await this.ensureItem(itemId);
+    return this.photoModel
+      .find({ menuItemId: this.oid(itemId) })
+      .sort({ isPrimary: -1, createdAt: -1 })
+      .lean();
   }
 
   async addPhotos(itemId: string, urls: string[]) {
     await this.ensureItem(itemId);
 
-    // if no primary exists yet, first uploaded becomes primary
-    const hasPrimary = await this.photoModel.exists({ menuItemId: new Types.ObjectId(itemId), isPrimary: true });
+    const itemOid = this.oid(itemId);
+    const hasPrimary = await this.photoModel.exists({
+      menuItemId: itemOid,
+      isPrimary: true,
+    });
 
     const docs = urls.map((url, idx) => ({
-      menuItemId: new Types.ObjectId(itemId),
+      menuItemId: itemOid,
       url,
       isPrimary: !hasPrimary && idx === 0,
     }));
 
     await this.photoModel.insertMany(docs);
-    return this.photoModel.find({ menuItemId: itemId }).sort({ createdAt: -1 }).lean();
+
+    return this.photoModel
+      .find({ menuItemId: itemOid })
+      .sort({ isPrimary: -1, createdAt: -1 })
+      .lean();
   }
 
   async removePhoto(itemId: string, photoId: string) {
     await this.ensureItem(itemId);
 
-    const photo = await this.photoModel.findOne({ _id: photoId, menuItemId: itemId });
+    const itemOid = this.oid(itemId);
+    const photo = await this.photoModel.findOne({
+      _id: this.oid(photoId),
+      menuItemId: itemOid,
+    });
     if (!photo) throw new NotFoundException('Photo not found');
 
     const wasPrimary = photo.isPrimary;
     await photo.deleteOne();
 
     if (wasPrimary) {
-      // pick newest as primary if exists
-      const next = await this.photoModel.findOne({ menuItemId: itemId }).sort({ createdAt: -1 });
+      const next = await this.photoModel
+        .findOne({ menuItemId: itemOid })
+        .sort({ createdAt: -1 });
       if (next) {
         await this.photoModel.updateOne({ _id: next._id }, { $set: { isPrimary: true } });
       }
@@ -57,11 +86,15 @@ export class PhotosService {
   async setPrimary(itemId: string, photoId: string) {
     await this.ensureItem(itemId);
 
-    const photo = await this.photoModel.findOne({ _id: photoId, menuItemId: itemId });
+    const itemOid = this.oid(itemId);
+    const photo = await this.photoModel.findOne({
+      _id: this.oid(photoId),
+      menuItemId: itemOid,
+    });
     if (!photo) throw new NotFoundException('Photo not found');
 
-    await this.photoModel.updateMany({ menuItemId: itemId }, { $set: { isPrimary: false } });
-    await this.photoModel.updateOne({ _id: photoId }, { $set: { isPrimary: true } });
+    await this.photoModel.updateMany({ menuItemId: itemOid }, { $set: { isPrimary: false } });
+    await this.photoModel.updateOne({ _id: photo._id }, { $set: { isPrimary: true } });
 
     return { success: true };
   }

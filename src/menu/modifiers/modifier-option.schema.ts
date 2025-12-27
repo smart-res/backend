@@ -15,6 +15,9 @@ export class ModifierOption {
   @Prop({ default: 0, min: 0, max: 99999900 })
   priceAdjustmentCents: number;
 
+  @Prop({ default: 0, min: 0 })
+  displayOrder: number;
+
   @Prop({ default: 'active', enum: ['active', 'inactive'] })
   status: ModStatus;
 }
@@ -22,4 +25,4 @@ export class ModifierOption {
 export const ModifierOptionSchema = SchemaFactory.createForClass(ModifierOption);
 
 ModifierOptionSchema.index({ groupId: 1, name: 1 }, { unique: true });
-ModifierOptionSchema.index({ groupId: 1 });
+ModifierOptionSchema.index({ groupId: 1, displayOrder: 1 }); // ✅ NEW

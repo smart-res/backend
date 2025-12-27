@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Delete, Param, Patch, Post, UseGuards, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Delete, Param, Patch, Post, UseGuards, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -23,6 +23,10 @@ export class PhotosController {
     private readonly photos: PhotosService,
     private readonly storage: StorageService,
   ) {}
+  @Get(':id/photos')
+  list(@Param('id') itemId: string) {
+    return this.photos.list(itemId);
+  }
 
   @Post(':id/photos')
   @UseInterceptors(
