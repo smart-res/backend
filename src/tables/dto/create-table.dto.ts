@@ -18,6 +18,6 @@ export class CreateTableDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive'])
-  status?: 'active' | 'inactive';
+  @IsEnum(['active', 'inactive', 'occupied'])
+  status?: 'active' | 'inactive' | 'occupied';
 }

@@ -13,6 +13,7 @@ import * as QRCode from 'qrcode';
 import * as jwt from 'jsonwebtoken';
 import PDFDocument from 'pdfkit';
 import archiver from 'archiver';
+import { RESTAURANT_ID } from 'src/config/restaurant.config';
 
 @Injectable()
 export class TablesService {
@@ -28,8 +29,32 @@ export class TablesService {
       throw new ConflictException('Table number already exists');
     }
 
-    const table = new this.tableModel(createTableDto);
-    return table.save();
+    // Create table
+    const table = await new this.tableModel(createTableDto).save();
+
+    // Generate QR code
+    const nextVersion = (table.qrTokenVersion ?? 0) + 1;
+
+    const payload = {
+      tableId: table._id,
+      restaurantId: RESTAURANT_ID,
+      v: nextVersion,
+      createdAt: Date.now(),
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET || 'secret', {
+      expiresIn: '30d',
+    });
+
+    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${token}`;
+
+    const updatedTable = await this.tableModel.findByIdAndUpdate(table._id, {
+      qrToken: token,
+      qrTokenCreatedAt: new Date(),
+      qrTokenVersion: nextVersion,
+    }, { new: true }).exec();
+
+    return updatedTable!;
   }
 
   async findAll(): Promise<Table[]> {
@@ -64,11 +89,34 @@ export class TablesService {
   }
 
   async updateStatus(id: string, statusDto: UpdateStatusDto): Promise<Table> {
-    const table = await this.tableModel
-      .findByIdAndUpdate(id, { status: statusDto.status }, { new: true })
-      .exec();
+    const table = await this.tableModel.findById(id).exec();
     if (!table) throw new NotFoundException('Table not found');
-    return table;
+
+    if (statusDto.status === 'inactive' && table.status === 'occupied') {
+      throw new ConflictException('Cannot set table to inactive while it is occupied');
+    }
+    table.status = statusDto.status;
+    return table.save();
+  }
+
+  async getQRCode(
+    id: string,
+  ): Promise<{ qrUrl: string; token: string; createdAt: string }> {
+    const table = await this.findOne(id);
+
+    if (!table.qrToken) {
+      throw new NotFoundException('QR code not generated yet');
+    }
+
+    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${table.qrToken}`;
+
+    const qrCodeDataUrl = await QRCode.toDataURL(qrUrl);
+
+    return {
+      qrUrl: qrCodeDataUrl,
+      token: table.qrToken,
+      createdAt: table.qrTokenCreatedAt!.toISOString().split('T')[0],
+    };
   }
 
   async generateQR(
@@ -79,6 +127,7 @@ export class TablesService {
 
     const payload = {
       tableId: table._id,
+      restaurantId: RESTAURANT_ID,
       v: nextVersion,
       createdAt: Date.now(),
     };
@@ -216,7 +265,7 @@ export class TablesService {
   }
 
   async downloadAllQR(): Promise<{ buffer: Buffer; filename: string }> {
-    const tables = await this.tableModel.find({ status: 'active' }).exec();
+    const tables = await this.tableModel.find({ status: { $in: ['active', 'occupied'] } }).exec();
 
     if (tables.length === 0) {
       throw new NotFoundException('No active tables found');
@@ -256,7 +305,7 @@ export class TablesService {
   }
 
   async regenerateAllQR(): Promise<{ affected: number; tables: string[] }> {
-    const tables = await this.tableModel.find({ status: 'active' }).exec();
+    const tables = await this.tableModel.find({ status: { $in: ['active', 'occupied'] } }).exec();
 
     if (tables.length === 0) {
       throw new NotFoundException('No active tables found');
@@ -269,6 +318,7 @@ export class TablesService {
 
       const payload = {
         tableId: table._id,
+        restaurantId: RESTAURANT_ID,
         v: nextVersion,
         createdAt: Date.now(),
       };

@@ -68,6 +68,11 @@ export class TablesController {
     return this.tablesService.updateStatus(id, dto);
   }
 
+  @Get(':id/qr')
+  getQRCode(@Param('id') id: string) {
+    return this.tablesService.getQRCode(id);
+  }
+
   @Post(':id/qr/generate')
   generateQR(@Param('id') id: string) {
     return this.tablesService.generateQR(id);
