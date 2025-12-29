@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type TableDocument = Table & Document;
 
-export type TableStatus = 'active' | 'inactive';
+export type TableStatus = 'active' | 'inactive'| 'occupied';
 
 @Schema({ timestamps: true })
 export class Table {
@@ -19,7 +19,7 @@ export class Table {
   @Prop()
   description?: string;
 
-  @Prop({ default: 'active', enum: ['active', 'inactive'] })
+  @Prop({ default: 'active', enum: ['active', 'inactive', 'occupied'] })
   status: TableStatus;
 
   @Prop()
