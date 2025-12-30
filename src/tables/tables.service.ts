@@ -110,7 +110,13 @@ export class TablesService {
 
     const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${table.qrToken}`;
 
-    const qrCodeDataUrl = await QRCode.toDataURL(qrUrl);
+    const qrOptions = {
+      width: 500,
+      margin: 2,
+      errorCorrectionLevel: "H" as const,
+    };
+
+    const qrCodeDataUrl = await QRCode.toDataURL(qrUrl, qrOptions);
 
     return {
       qrUrl: qrCodeDataUrl,
@@ -138,13 +144,19 @@ export class TablesService {
 
     const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${token}`;
 
+    const qrOptions = {
+      width: 500,
+      margin: 2,
+      errorCorrectionLevel: "H" as const,
+    };
+
     const updatedTable = await this.tableModel.findByIdAndUpdate(id, {
       qrToken: token,
       qrTokenCreatedAt: new Date(),
       qrTokenVersion: nextVersion,
     });
 
-    const qrCodeDataUrl = await QRCode.toDataURL(qrUrl);
+    const qrCodeDataUrl = await QRCode.toDataURL(qrUrl, qrOptions);
 
     return {
       qrUrl: qrCodeDataUrl,
@@ -229,32 +241,6 @@ export class TablesService {
           .then((qrBuffer) => {
             const xPos = (doc.page.width - 300) / 2;
             doc.image(qrBuffer, xPos, doc.y, { width: 300 });
-            doc.moveDown(8);
-
-            // Instructions
-            doc
-              .fontSize(16)
-              .font('Helvetica-Bold')
-              .text('📱 Scan to Order', { align: 'center' });
-            doc.moveDown(0.5);
-
-            doc
-              .fontSize(10)
-              .font('Helvetica')
-              .text('1. Open your camera app', { align: 'center' })
-              .text('2. Point at the QR code', { align: 'center' })
-              .text('3. Tap the notification to view menu', {
-                align: 'center',
-              });
-
-            doc.moveDown(1);
-            doc
-              .fontSize(8)
-              .fillColor('gray')
-              .text(`Generated: ${new Date().toLocaleDateString()}`, {
-                align: 'center',
-              });
-
             doc.end();
           })
           .catch(reject);
@@ -265,40 +251,42 @@ export class TablesService {
   }
 
   async downloadAllQR(): Promise<{ buffer: Buffer; filename: string }> {
-    const tables = await this.tableModel.find({ status: { $in: ['active', 'occupied'] } }).exec();
+    const tables = await this.tableModel
+      .find({ status: { $in: ["active", "occupied"] } })
+      .select("_id tableNumber qrToken status")
+      .lean()
+      .exec();
 
-    if (tables.length === 0) {
-      throw new NotFoundException('No active tables found');
-    }
+    if (!tables.length) throw new NotFoundException("No active tables found");
 
     return new Promise((resolve, reject) => {
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      const buffers: Buffer[] = [];
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      const chunks: Buffer[] = [];
 
-      archive.on('data', (chunk) => buffers.push(chunk));
-      archive.on('end', () => {
-        resolve({
-          buffer: Buffer.concat(buffers),
-          filename: `all-tables-qr-${Date.now()}.zip`,
-        });
-      });
-      archive.on('error', reject);
+      archive.on("data", (c) => chunks.push(c));
+      archive.on("end", () => resolve({
+        buffer: Buffer.concat(chunks),
+        filename: `all-tables-qr-${Date.now()}.zip`,
+      }));
+      archive.on("error", reject);
 
-      // Generate QR code for each table
-      const promises = tables.map(async (table) => {
-        if (!table.qrToken) return;
+      const jobs = tables.map(async (t) => {
+        if (!t.qrToken) return;
 
-        const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${table.qrToken}`;
-        const qrBuffer = await QRCode.toBuffer(qrUrl, {
+        const qrUrl = `https://restaurant-domain.com/menu?table=${t._id}&token=${t.qrToken}`;
+
+        const qrOptions = {
           width: 500,
           margin: 2,
-          errorCorrectionLevel: 'H',
-        });
+          errorCorrectionLevel: "H" as const,
+        };
 
-        archive.append(qrBuffer, { name: `table-${table.tableNumber}-qr.png` });
+        const qrBuffer = await QRCode.toBuffer(qrUrl, qrOptions);
+
+        archive.append(qrBuffer, { name: `table-${t.tableNumber}-qr.png` });
       });
 
-      Promise.all(promises)
+      Promise.all(jobs)
         .then(() => archive.finalize())
         .catch(reject);
     });
