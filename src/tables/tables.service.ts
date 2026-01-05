@@ -46,7 +46,9 @@ export class TablesService {
       expiresIn: '30d',
     });
 
-    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${token}`;
+    const restaurantDomain = process.env.RES_DOMAIN;
+
+    const qrUrl = `${restaurantDomain}/menu?table=${table._id}&token=${token}`;
 
     const updatedTable = await this.tableModel.findByIdAndUpdate(table._id, {
       qrToken: token,
@@ -107,8 +109,9 @@ export class TablesService {
     if (!table.qrToken) {
       throw new NotFoundException('QR code not generated yet');
     }
-
-    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${table.qrToken}`;
+    
+    const restaurantDomain = process.env.RES_DOMAIN;
+    const qrUrl = `${restaurantDomain}/menu?table=${table._id}&token=${table.qrToken}`;
 
     const qrOptions = {
       width: 500,
@@ -142,7 +145,8 @@ export class TablesService {
       expiresIn: '30d',
     });
 
-    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${token}`;
+    const restaurantDomain = process.env.RES_DOMAIN;
+    const qrUrl = `${restaurantDomain}/menu?table=${table._id}&token=${token}`;
 
     const qrOptions = {
       width: 500,
@@ -177,7 +181,8 @@ export class TablesService {
       );
     }
 
-    const qrUrl = `https://restaurant-domain.com/menu?table=${table._id}&token=${table.qrToken}`;
+    const restaurantDomain = process.env.RES_DOMAIN;
+    const qrUrl = `${restaurantDomain}/menu?table=${table._id}&token=${table.qrToken}`;
 
     if (format === 'png') {
       const qrBuffer = await QRCode.toBuffer(qrUrl, {
@@ -273,7 +278,8 @@ export class TablesService {
       const jobs = tables.map(async (t) => {
         if (!t.qrToken) return;
 
-        const qrUrl = `https://restaurant-domain.com/menu?table=${t._id}&token=${t.qrToken}`;
+        const restaurantDomain = process.env.RES_DOMAIN;
+        const qrUrl = `${restaurantDomain}/menu?table=${t._id}&token=${t.qrToken}`;
 
         const qrOptions = {
           width: 500,

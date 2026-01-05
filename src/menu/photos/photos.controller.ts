@@ -16,7 +16,7 @@ function validateImage(file: Express.Multer.File) {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'SUPER_ADMIN')
 @Controller('/api/admin/menu/items')
 export class PhotosController {
   constructor(

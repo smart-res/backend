@@ -5,65 +5,67 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { AdminsService } from '../admins/admins.service';
 import { ConfigService } from '@nestjs/config';
+import { AccountsService } from '../accounts/accounts.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly adminsService: AdminsService,
+    private readonly accountsService: AccountsService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
 
-  async register(username: string, password: string) {
-    const exists = await this.adminsService.findByUsername(username);
-    if (exists) {
-      throw new BadRequestException('Username already exists');
-    }
+  // async register(username: string, password: string) {
+  //   const exists = await this.accountsService.findByUsername(username);
+  //   if (exists) throw new BadRequestException('Username already exists');
+    
+  //   const admin = await this.accountsService.create({
+  //     username,
+  //     password,
+  //     role: 'SUPER_ADMIN',
+  //   });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+  //   const payload = {
+  //     sub: (admin as any)._id?.toString?.() ?? (admin as any).id,
+  //     username: admin.username,
+  //     role: (admin as any).role,
+  //   };
 
-    const admin = await this.adminsService.create({
-      username,
-      password: hashedPassword,
-      role: 'ADMIN',
-    });
+  //   const accessToken = this.jwtService.sign(payload, {
+  //     secret: this.configService.get('JWT_ACCESS_SECRET'),
+  //     expiresIn: this.configService.get('ACCESS_TOKEN_EXPIRE'),
+  //   });
 
-    const payload = {
-      sub: admin._id.toString(),
-      role: admin.role,
-    };
+  //   const refreshToken = this.jwtService.sign(
+  //     { sub: payload.sub },
+  //     {
+  //       secret: this.configService.get('JWT_REFRESH_SECRET'),
+  //       expiresIn: this.configService.get('REFRESH_TOKEN_EXPIRE'),
+  //     },
+  //   );
 
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET'),
-      expiresIn: this.configService.get('ACCESS_TOKEN_EXPIRE'),
-    });
-
-    const refreshToken = this.jwtService.sign(
-      { sub: admin._id.toString() },
-      {
-        secret: this.configService.get('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get('REFRESH_TOKEN_EXPIRE'),
-      },
-    );
-
-    return {
-      accessToken,
-      refreshToken,
-    };
-  }
+  //   return { accessToken, refreshToken };
+  // }
 
   async login(username: string, password: string) {
-    const admin = await this.adminsService.findByUsername(username);
-    if (!admin) throw new BadRequestException('Invalid credentials');
+    const acc = await this.accountsService.findByUsername(username);
+    if (!acc) throw new BadRequestException('Invalid credentials');
+    if ((acc as any).status === 'DISABLED') {
+      throw new UnauthorizedException('Account disabled');
+    }
 
-    const match = await bcrypt.compare(password, admin.password);
+    if ((acc as any).role !== 'ADMIN' && (acc as any).role !== 'SUPER_ADMIN') {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const match = await bcrypt.compare(password, (acc as any).password);
     if (!match) throw new BadRequestException('Invalid credentials');
 
     const payload = {
-      sub: admin._id.toString(),
-      role: admin.role,
+      sub: (acc as any)._id.toString(),
+      username: (acc as any).username,
+      role: (acc as any).role,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -72,7 +74,7 @@ export class AuthService {
     });
 
     const refreshToken = this.jwtService.sign(
-      { sub: admin._id.toString() },
+      { sub: payload.sub },
       {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
         expiresIn: this.configService.get('REFRESH_TOKEN_EXPIRE'),
@@ -84,17 +86,25 @@ export class AuthService {
 
   async refreshAccessToken(refreshToken: string) {
     try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub: string;
-      }>(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      });
+      const payload = await this.jwtService.verifyAsync<{ sub: string }>(
+        refreshToken,
+        {
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        },
+      );
 
-      const admin = await this.adminsService.findById(payload.sub);
-      if (!admin) throw new UnauthorizedException('Unauthoried')
+      const acc = await this.accountsService.findById(payload.sub);
+      if (!acc) throw new UnauthorizedException('Unauthorized');
+      if ((acc as any).status === 'DISABLED') {
+        throw new UnauthorizedException('Account disabled');
+      }
 
       const accessToken = this.jwtService.sign(
-        { sub: payload.sub, role: admin.role },
+        {
+          sub: payload.sub,
+          username: (acc as any).username,
+          role: (acc as any).role,
+        },
         {
           secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
           expiresIn: this.configService.get('ACCESS_TOKEN_EXPIRE'),
@@ -102,7 +112,7 @@ export class AuthService {
       );
 
       return { accessToken };
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

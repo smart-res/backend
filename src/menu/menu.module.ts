@@ -20,8 +20,8 @@ import { StorageService } from './photos/storage.service';
 import { ModifiersController } from './modifiers/modifiers.controller';
 import { ModifiersService } from './modifiers/modifiers.service';
 
-import { GuestMenuController } from './guest/guest.controller';
-import { GuestMenuService } from './guest/guest.service';
+import { GuestMenuController } from './public/guest.controller';
+import { GuestMenuService } from './public/guest.service';
 
 import { ItemReviewsService } from './review/item-review.service';
 import { ItemReviewsController } from './review/item-review.controller';
